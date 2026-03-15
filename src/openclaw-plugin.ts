@@ -177,6 +177,19 @@ function getDBPath(projectDir: string): string {
   return join(getSessionDir(), `${hash}.db`);
 }
 
+// ── Module-level DB singleton ─────────────────────────────
+// Shared across all register() calls (one per agent session).
+// Lazy-initialized on first register() using the first projectDir seen.
+let _dbSingleton: SessionDB | null = null;
+function getOrCreateDB(projectDir: string): SessionDB {
+  if (!_dbSingleton) {
+    const dbPath = getDBPath(projectDir);
+    _dbSingleton = new SessionDB({ dbPath });
+    _dbSingleton.cleanupOldSessions(7);
+  }
+  return _dbSingleton;
+}
+
 // ── Module-level state for command handlers ───────────────
 // Commands are registered once (first register() call) but need access to the
 // latest session's db/sessionId. These refs are updated by each register() call.
@@ -216,10 +229,8 @@ export default {
       warn: (...args: unknown[]) => api.logger?.warn?.("[context-mode]", ...args),
     };
 
-    // Initialize session synchronously (SessionDB constructor is sync)
-    const dbPath = getDBPath(projectDir);
-    const db = new SessionDB({ dbPath });
-    db.cleanupOldSessions(7);
+    // Get shared DB singleton (lazy-init on first register() call)
+    const db = getOrCreateDB(projectDir);
     // Start with temp UUID — session_start will assign the real ID + sessionKey
     let sessionId = randomUUID();
     let resumeInjected = false;
@@ -523,10 +534,11 @@ export default {
       "before_prompt_build",
       () => {
         try {
+          const sid = sessionId; // snapshot to avoid race with concurrent session_start
           if (resumeInjected) return undefined;
-          const resume = db.getResume(sessionId);
+          const resume = db.getResume(sid);
           if (!resume) return undefined;
-          const freshStats = db.getSessionStats(sessionId);
+          const freshStats = db.getSessionStats(sid);
           if ((freshStats?.compact_count ?? 0) === 0) return undefined;
           resumeInjected = true;
           log.debug(`before_prompt_build: injecting resume snapshot (${resume.snapshot.length} chars)`);
