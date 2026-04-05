@@ -987,6 +987,19 @@ describe("Codex CLI hook dispatch (#225)", () => {
   });
 });
 
+// ── Cursor stop hook (#HOOK_MAP cursor stop) ─────────────────────────────
+
+describe("Cursor CLI hook dispatch — stop event", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src", "cli.ts"), "utf-8");
+
+  test("HOOK_MAP cursor entry includes stop event", () => {
+    const cursorEntry = CLI_SOURCE.match(/"cursor"\s*:\s*\{[\s\S]*?\}/);
+    expect(cursorEntry).not.toBeNull();
+    expect(cursorEntry![0]).toContain("stop");
+    expect(cursorEntry![0]).toContain("hooks/cursor/stop.mjs");
+  });
+});
+
 // ── Upgrade skill sync to marketplace/cache directories ───────────────────
 
 describe("Upgrade syncs skills to active install path (#228)", () => {

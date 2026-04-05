@@ -59,6 +59,7 @@ const HOOK_MAP: Record<string, Record<string, string>> = {
     pretooluse: "hooks/cursor/pretooluse.mjs",
     posttooluse: "hooks/cursor/posttooluse.mjs",
     sessionstart: "hooks/cursor/sessionstart.mjs",
+    stop: "hooks/cursor/stop.mjs",
   },
   "codex": {
     pretooluse: "hooks/codex/pretooluse.mjs",

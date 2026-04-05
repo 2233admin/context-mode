@@ -417,6 +417,7 @@ context-mode hook cursor stop
 - `afterAgentResponse` is fire-and-forget (receives `text`, no return value expected)
 - Hook payloads name MCP tools as `MCP:<tool>` and need adapter normalization
 - Claude-compatible Cursor behavior exists, but native Cursor config is the supported path
+- `additional_context` in postToolUse and sessionStart hooks is accepted but NOT surfaced to the model (Cursor upstream bug — [forum #155689](https://forum.cursor.com/t/native-posttooluse-hooks-accept-and-log-additional-context-successfully-but-the-injected-context-is-not-surfaced-to-the-model/155689), [forum #156157](https://forum.cursor.com/t/cursor-hooks-additional-context-not-injected-in-agent-context-in-posttooluse/156157)). Routing enforcement relies on `.mdc` rules file and MCP tool descriptions instead.
 
 ---
 

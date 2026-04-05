@@ -117,5 +117,9 @@ try {
   } catch { /* ignore logging failure */ }
 }
 
-const output = `SessionStart:compact hook success: Success\nSessionStart hook additional context: \n${additionalContext}`;
-process.stdout.write(output);
+console.log(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: "SessionStart",
+    additionalContext,
+  },
+}));
