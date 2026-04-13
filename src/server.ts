@@ -2085,11 +2085,16 @@ async function main() {
     console.error(`Cleaned up ${cleaned} stale DB file(s) from previous sessions`);
   }
 
+  // MCP readiness sentinel path (#230)
+  const mcpSentinel = join(tmpdir(), `context-mode-mcp-ready-${process.ppid}`);
+
   // Clean up own DB + backgrounded processes + preload script on shutdown
   const shutdown = () => {
     executor.cleanupBackgrounded();
     if (_store) _store.close(); // persist DB for --continue sessions
     try { unlinkSync(CM_FS_PRELOAD); } catch { /* best effort */ }
+    // Remove MCP readiness sentinel (#230)
+    try { unlinkSync(mcpSentinel); } catch { /* best effort */ }
   };
   const gracefulShutdown = async () => {
     shutdown();
@@ -2104,6 +2109,9 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Write MCP readiness sentinel (#230)
+  try { writeFileSync(mcpSentinel, String(process.pid)); } catch { /* best effort */ }
 
   // Detect platform adapter — stored for platform-aware session paths
   try {

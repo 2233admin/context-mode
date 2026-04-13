@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 
 // Dynamic import for .mjs module
 let routePreToolUse: (
@@ -28,8 +31,17 @@ beforeAll(async () => {
   GREP_GUIDANCE = constants.GREP_GUIDANCE;
 });
 
+// MCP readiness sentinel — most tests expect MCP to be ready (deny behavior).
+// Tests for graceful degradation (#230) remove sentinel explicitly.
+const mcpSentinel = resolve(tmpdir(), `context-mode-mcp-ready-${process.ppid}`);
+
 beforeEach(() => {
   if (typeof resetGuidanceThrottle === "function") resetGuidanceThrottle();
+  writeFileSync(mcpSentinel, String(process.pid));
+});
+
+afterEach(() => {
+  try { unlinkSync(mcpSentinel); } catch {}
 });
 
 describe("routePreToolUse", () => {
@@ -282,6 +294,41 @@ describe("routePreToolUse", () => {
       expect(result!.reason).toContain("WebFetch blocked");
       expect(result!.reason).toContain("fetch_and_index");
       expect(result!.reason).toContain("ctx_search");
+    });
+
+    it("allows WebFetch when MCP server not ready (#230)", () => {
+      // Remove sentinel to simulate MCP not started
+      try { unlinkSync(mcpSentinel); } catch {}
+      const result = routePreToolUse("WebFetch", { url: "https://example.com" });
+      expect(result).toBeNull();
+    });
+
+    it("allows mcp_web_fetch alias when MCP server not ready (#230)", () => {
+      try { unlinkSync(mcpSentinel); } catch {}
+      const result = routePreToolUse("mcp_web_fetch", { url: "https://example.com" });
+      expect(result).toBeNull();
+    });
+  });
+
+  // ─── MCP readiness: all redirects degrade gracefully (#230) ───
+
+  describe("MCP readiness graceful degradation (#230)", () => {
+    it("allows curl when MCP server not ready", () => {
+      try { unlinkSync(mcpSentinel); } catch {}
+      const result = routePreToolUse("Bash", { command: "curl https://example.com" });
+      expect(result).toBeNull();
+    });
+
+    it("allows inline HTTP when MCP server not ready", () => {
+      try { unlinkSync(mcpSentinel); } catch {}
+      const result = routePreToolUse("Bash", { command: "node -e \"fetch('https://example.com')\"" });
+      expect(result).toBeNull();
+    });
+
+    it("allows build tools when MCP server not ready", () => {
+      try { unlinkSync(mcpSentinel); } catch {}
+      const result = routePreToolUse("Bash", { command: "./gradlew build" });
+      expect(result).toBeNull();
     });
   });
 
