@@ -516,11 +516,13 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
    }
    ```
 
-4. Copy routing instructions:
+4. Copy routing instructions (recommended for full routing awareness):
 
    ```bash
-   context-mode setup --platform qwen-code
+   cp node_modules/context-mode/configs/qwen-code/QWEN.md ./QWEN.md
    ```
+
+   For global use: `cp node_modules/context-mode/configs/qwen-code/QWEN.md ~/.qwen/QWEN.md`
 
 5. Restart Qwen Code.
 

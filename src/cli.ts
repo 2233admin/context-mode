@@ -70,6 +70,13 @@ const HOOK_MAP: Record<string, Record<string, string>> = {
     pretooluse: "hooks/kiro/pretooluse.mjs",
     posttooluse: "hooks/kiro/posttooluse.mjs",
   },
+  "qwen-code": {
+    pretooluse: "hooks/pretooluse.mjs",
+    posttooluse: "hooks/posttooluse.mjs",
+    precompact: "hooks/precompact.mjs",
+    sessionstart: "hooks/sessionstart.mjs",
+    userpromptsubmit: "hooks/userpromptsubmit.mjs",
+  },
 };
 
 async function hookDispatch(platform: string, event: string): Promise<void> {
