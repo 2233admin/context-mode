@@ -1,10 +1,8 @@
 /**
  * adapters/qwen-code — Qwen Code platform adapter.
  *
- * Qwen Code (by Alibaba/Qwen team) uses an identical hook wire protocol
- * to Claude Code: JSON stdin/stdout, same event names, same response
- * format (hookSpecificOutput, updatedInput, additionalContext, exit 2).
- * Verified from qwen-code source: packages/core/src/hooks/hookRunner.ts
+ * Extends ClaudeCodeBaseAdapter (shared wire-protocol parse/format methods)
+ * with Qwen Code-specific configuration, diagnostics, and session ID logic.
  *
  * Differences from Claude Code:
  *   - Config dir: ~/.qwen/ (not ~/.claude/)
@@ -22,49 +20,28 @@ import {
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 
-import { BaseAdapter } from "../base.js";
+import { ClaudeCodeBaseAdapter, type ClaudeCodeWireInput } from "../claude-code-base.js";
 
 import type {
   HookAdapter,
   HookParadigm,
   PlatformCapabilities,
   DiagnosticResult,
-  PreToolUseEvent,
-  PostToolUseEvent,
-  PreCompactEvent,
-  SessionStartEvent,
-  PreToolUseResponse,
-  PostToolUseResponse,
-  PreCompactResponse,
-  SessionStartResponse,
   HookRegistration,
 } from "../types.js";
-
-// ─────────────────────────────────────────────────────────
-// Qwen Code raw input types (identical to Claude Code)
-// ─────────────────────────────────────────────────────────
-
-interface QwenCodeHookInput {
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_output?: string;
-  is_error?: boolean;
-  session_id?: string;
-  transcript_path?: string;
-  source?: string;
-}
 
 // ─────────────────────────────────────────────────────────
 // Adapter implementation
 // ─────────────────────────────────────────────────────────
 
-export class QwenCodeAdapter extends BaseAdapter implements HookAdapter {
+export class QwenCodeAdapter extends ClaudeCodeBaseAdapter implements HookAdapter {
   constructor() {
     super([".qwen"]);
   }
 
   readonly name = "Qwen Code";
   readonly paradigm: HookParadigm = "json-stdio";
+  protected readonly projectDirEnvVar = "QWEN_PROJECT_DIR";
 
   readonly capabilities: PlatformCapabilities = {
     preToolUse: true,
@@ -75,108 +52,6 @@ export class QwenCodeAdapter extends BaseAdapter implements HookAdapter {
     canModifyOutput: true,
     canInjectSessionContext: true,
   };
-
-  // ── Input parsing (identical wire format to Claude Code) ──
-
-  parsePreToolUseInput(raw: unknown): PreToolUseEvent {
-    const input = raw as QwenCodeHookInput;
-    return {
-      toolName: input.tool_name ?? "",
-      toolInput: input.tool_input ?? {},
-      sessionId: this.extractSessionId(input),
-      projectDir: process.env.QWEN_PROJECT_DIR,
-      raw,
-    };
-  }
-
-  parsePostToolUseInput(raw: unknown): PostToolUseEvent {
-    const input = raw as QwenCodeHookInput;
-    return {
-      toolName: input.tool_name ?? "",
-      toolInput: input.tool_input ?? {},
-      toolOutput: input.tool_output,
-      isError: input.is_error,
-      sessionId: this.extractSessionId(input),
-      projectDir: process.env.QWEN_PROJECT_DIR,
-      raw,
-    };
-  }
-
-  parsePreCompactInput(raw: unknown): PreCompactEvent {
-    const input = raw as QwenCodeHookInput;
-    return {
-      sessionId: this.extractSessionId(input),
-      projectDir: process.env.QWEN_PROJECT_DIR,
-      raw,
-    };
-  }
-
-  parseSessionStartInput(raw: unknown): SessionStartEvent {
-    const input = raw as QwenCodeHookInput;
-    const rawSource = input.source ?? "startup";
-
-    let source: SessionStartEvent["source"];
-    switch (rawSource) {
-      case "compact":
-        source = "compact";
-        break;
-      case "resume":
-        source = "resume";
-        break;
-      case "clear":
-        source = "clear";
-        break;
-      default:
-        source = "startup";
-    }
-
-    return {
-      sessionId: this.extractSessionId(input),
-      source,
-      projectDir: process.env.QWEN_PROJECT_DIR,
-      raw,
-    };
-  }
-
-  // ── Response formatting (identical to Claude Code) ─────
-
-  formatPreToolUseResponse(response: PreToolUseResponse): unknown {
-    if (response.decision === "deny") {
-      return {
-        permissionDecision: "deny",
-        reason: response.reason ?? "Blocked by context-mode hook",
-      };
-    }
-    if (response.decision === "modify" && response.updatedInput) {
-      return { updatedInput: response.updatedInput };
-    }
-    if (response.decision === "context" && response.additionalContext) {
-      return { additionalContext: response.additionalContext };
-    }
-    if (response.decision === "ask") {
-      return { permissionDecision: "ask" };
-    }
-    return undefined;
-  }
-
-  formatPostToolUseResponse(response: PostToolUseResponse): unknown {
-    const result: Record<string, unknown> = {};
-    if (response.additionalContext) {
-      result.additionalContext = response.additionalContext;
-    }
-    if (response.updatedOutput) {
-      result.updatedMCPToolOutput = response.updatedOutput;
-    }
-    return Object.keys(result).length > 0 ? result : undefined;
-  }
-
-  formatPreCompactResponse(response: PreCompactResponse): unknown {
-    return response.context ?? "";
-  }
-
-  formatSessionStartResponse(response: SessionStartResponse): unknown {
-    return response.context ?? "";
-  }
 
   // ── Configuration (differs from Claude Code) ───────────
 
@@ -345,7 +220,7 @@ export class QwenCodeAdapter extends BaseAdapter implements HookAdapter {
   // Qwen Code prioritizes session_id field, then QWEN_SESSION_ID env var.
   // Claude Code prioritizes transcript_path UUID first.
 
-  private extractSessionId(input: QwenCodeHookInput): string {
+  protected extractSessionId(input: ClaudeCodeWireInput): string {
     if (input.session_id) return input.session_id;
     if (input.transcript_path) {
       const match = input.transcript_path.match(
